@@ -469,3 +469,149 @@ Offset-based pagination becomes slower for large datasets.
 
 Use cursor-based pagination based on created_at and id.
 
+# Stage 3
+
+## Query Performance Analysis
+
+As the platform grows, the most frequently executed query will be fetching notifications for a student.
+
+### Query
+
+```sql
+SELECT *
+FROM notifications
+WHERE student_id = 1042
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+---
+
+## Why This Query May Become Slow
+
+Initially, the query will perform well because the number of notifications is small.
+
+However, as the platform scales to thousands of students and millions of notifications, the database may need to scan a large number of rows before returning the latest notifications.
+
+Potential issues include:
+
+* Full table scans
+* Increased disk I/O
+* Higher query execution time
+* Slower user experience
+
+The problem becomes more noticeable when many users request notifications simultaneously.
+
+---
+
+## Optimization Strategy
+
+### Create a Composite Index
+
+```sql
+CREATE INDEX idx_notifications_student_created
+ON notifications(student_id, created_at DESC);
+```
+
+### Why This Helps
+
+The query filters using:
+
+```sql
+WHERE student_id = ?
+```
+
+and sorts using:
+
+```sql
+ORDER BY created_at DESC
+```
+
+The composite index stores records in the same order required by the query.
+
+As a result:
+
+* Fewer rows need to be scanned.
+* Sorting is minimized.
+* Query execution becomes significantly faster.
+
+---
+
+## Before Optimization
+
+```text
+Database
+   |
+   | Scan many rows
+   v
+Find matching student records
+   |
+   v
+Sort records
+   |
+   v
+Return latest 20
+```
+
+---
+
+## After Optimization
+
+```text
+Database
+   |
+   | Direct index lookup
+   v
+Latest notifications found immediately
+   |
+   v
+Return latest 20
+```
+
+---
+
+## Additional Improvements
+
+### Pagination
+
+Instead of loading all notifications at once:
+
+```sql
+LIMIT 20
+```
+
+should always be used.
+
+This reduces memory consumption and response size.
+
+---
+
+### Read Replicas
+
+If notification reads become very frequent, read replicas can be introduced.
+
+Benefits:
+
+* Reduced load on the primary database
+* Better scalability
+* Improved response times
+
+---
+
+### Caching
+
+Frequently accessed notifications can be cached using Redis.
+
+Benefits:
+
+* Faster retrieval
+* Reduced database load
+* Better user experience during peak traffic
+
+---
+
+## Conclusion
+
+The notification retrieval query is expected to be the most frequently executed operation in the system. By introducing a composite index on `student_id` and `created_at`, along with pagination, caching, and read replicas, the system can continue to perform efficiently even when handling millions of notifications.
+
+

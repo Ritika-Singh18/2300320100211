@@ -274,3 +274,198 @@ WebSockets are used for real-time delivery of notifications. Once a student open
 
 ```
 ```
+
+# Stage 2
+
+## Database Selection
+
+For this notification system, I would choose **PostgreSQL** as the primary database.
+
+### Reasons
+
+1. Notifications have a well-defined structure and relationships.
+2. The system requires filtering, pagination, sorting, and read/unread tracking.
+3. PostgreSQL provides strong indexing support which is important for fast notification retrieval.
+4. ACID compliance ensures reliable storage of notifications.
+5. Future reporting and analytics become easier using SQL queries.
+
+Although NoSQL databases can handle large volumes of data, the notification system requirements are highly structured and relational in nature, making PostgreSQL a suitable choice.
+
+---
+
+## Database Schema
+
+### Students Table
+
+```sql
+CREATE TABLE students (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Notifications Table
+
+```sql
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY,
+    student_id BIGINT NOT NULL,
+    notification_type VARCHAR(20) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_student
+    FOREIGN KEY(student_id)
+    REFERENCES students(id)
+);
+```
+
+---
+
+## Relationship
+
+```text
+One Student
+      |
+      |
+      v
+Many Notifications
+```
+
+A student can receive multiple notifications, while each notification belongs to exactly one student.
+
+---
+
+## Recommended Indexes
+
+```sql
+CREATE INDEX idx_student_id
+ON notifications(student_id);
+
+CREATE INDEX idx_student_read
+ON notifications(student_id, is_read);
+
+CREATE INDEX idx_created_at
+ON notifications(created_at DESC);
+
+CREATE INDEX idx_notification_type
+ON notifications(notification_type);
+```
+
+These indexes help speed up filtering and retrieval operations.
+
+---
+
+## Common Queries
+
+### Fetch Latest Notifications
+
+```sql
+SELECT *
+FROM notifications
+WHERE student_id = 1042
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+---
+
+### Fetch Unread Notifications
+
+```sql
+SELECT *
+FROM notifications
+WHERE student_id = 1042
+AND is_read = FALSE
+ORDER BY created_at DESC;
+```
+
+---
+
+### Fetch Placement Notifications
+
+```sql
+SELECT *
+FROM notifications
+WHERE student_id = 1042
+AND notification_type = 'Placement'
+ORDER BY created_at DESC;
+```
+
+---
+
+### Mark Notification as Read
+
+```sql
+UPDATE notifications
+SET is_read = TRUE
+WHERE id = 'notification-id';
+```
+
+---
+
+### Mark All Notifications as Read
+
+```sql
+UPDATE notifications
+SET is_read = TRUE
+WHERE student_id = 1042;
+```
+
+---
+
+## Potential Challenges as Data Grows
+
+Assume the platform grows to:
+
+* 50,000 students
+* Millions of notifications
+
+The following challenges may occur:
+
+### 1. Slow Query Performance
+
+Searching through millions of rows without indexes will increase response times.
+
+### Solution
+
+Create indexes on frequently queried columns such as:
+
+* student_id
+* notification_type
+* is_read
+* created_at
+
+---
+
+### 2. Large Storage Requirements
+
+Notification records will continuously grow.
+
+### Solution
+
+Archive old notifications periodically into cold storage or archive tables.
+
+---
+
+### 3. Increased Database Load
+
+Large numbers of concurrent users may overload the database.
+
+### Solution
+
+Introduce caching and database read replicas.
+
+---
+
+### 4. Pagination Performance
+
+Offset-based pagination becomes slower for large datasets.
+
+### Solution
+
+Use cursor-based pagination based on created_at and id.
+

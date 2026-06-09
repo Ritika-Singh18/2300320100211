@@ -824,3 +824,222 @@ The system can scale effectively by introducing:
 
 These improvements ensure that the platform remains responsive and reliable even when serving a large number of students and notifications.
 
+# Stage 5
+
+## Notification Architecture Redesign
+
+The initial architecture works well for small-scale deployments. However, as the number of students and notifications increases, a more scalable and resilient architecture becomes necessary.
+
+Instead of creating and delivering notifications synchronously, the system can be redesigned using an event-driven architecture.
+
+---
+
+## Current Approach
+
+```text
+Admin Action
+      |
+      v
+Notification Service
+      |
+      v
+Database
+      |
+      v
+Student
+```
+
+### Limitations
+
+* Tight coupling between components
+* Slower response times during high traffic
+* Difficult to scale notification delivery
+* Single service becomes a bottleneck
+
+---
+
+## Proposed Architecture
+
+```text
+                    +------------------+
+                    |   Admin Portal   |
+                    +------------------+
+                             |
+                             v
+                    +------------------+
+                    | Notification API |
+                    +------------------+
+                             |
+                             v
+                    +------------------+
+                    |  Message Queue   |
+                    +------------------+
+                             |
+               ----------------------------
+               |                          |
+               v                          v
+      +----------------+        +----------------+
+      | Notification   |        | Notification   |
+      | Worker 1       |        | Worker 2       |
+      +----------------+        +----------------+
+               |                          |
+               ------------ ---------------
+                            |
+                            v
+                   +------------------+
+                   |    Database      |
+                   +------------------+
+                            |
+                            v
+                   +------------------+
+                   | WebSocket Server |
+                   +------------------+
+                            |
+                            v
+                   +------------------+
+                   |     Students     |
+                   +------------------+
+```
+
+---
+
+## Event Flow
+
+### Step 1
+
+An administrator creates a new notification.
+
+Example:
+
+```text
+AMD hiring applications are now open.
+```
+
+---
+
+### Step 2
+
+The Notification API validates the request and publishes an event to the message queue.
+
+Example Event:
+
+```json
+{
+  "eventType": "NOTIFICATION_CREATED",
+  "type": "Placement",
+  "message": "AMD hiring applications are now open."
+}
+```
+
+---
+
+### Step 3
+
+Notification workers consume events from the queue.
+
+Responsibilities:
+
+* Process notification data
+* Determine target students
+* Store notifications in the database
+
+---
+
+### Step 4
+
+After successful storage, the worker publishes the notification to connected WebSocket servers.
+
+---
+
+### Step 5
+
+Students receive the notification instantly without refreshing the application.
+
+---
+
+## Benefits of the Redesigned Architecture
+
+### 1. Better Scalability
+
+Multiple workers can process notifications simultaneously.
+
+```text
+Worker 1
+Worker 2
+Worker 3
+Worker N
+```
+
+As demand increases, additional workers can be added without changing application logic.
+
+---
+
+### 2. Improved Reliability
+
+If one worker fails:
+
+```text
+Worker 1 -> Failed
+Worker 2 -> Continues Processing
+```
+
+Notifications remain in the queue until successfully processed.
+
+---
+
+### 3. Faster API Response Time
+
+The API only needs to publish a message to the queue.
+
+It does not wait for:
+
+* Database operations
+* Notification delivery
+* WebSocket communication
+
+This reduces request latency.
+
+---
+
+### 4. Easier Maintenance
+
+Each component has a single responsibility:
+
+| Component         | Responsibility        |
+| ----------------- | --------------------- |
+| Notification API  | Accept requests       |
+| Queue             | Buffer events         |
+| Workers           | Process notifications |
+| Database          | Store notifications   |
+| WebSocket Service | Deliver notifications |
+
+This makes the system easier to maintain and extend.
+
+---
+
+## Technologies That Can Be Used
+
+### Message Queue
+
+* RabbitMQ
+* Apache Kafka
+* AWS SQS
+
+### Database
+
+* PostgreSQL
+
+### Cache
+
+* Redis
+
+### Real-Time Communication
+
+* WebSockets
+* Socket.IO
+
+---
+
+## Conclusion
+
+The redesigned event-driven architecture improves scalability, reliability, and performance by separating notification creation, processing, storage, and delivery into independent components. This design can efficiently support a growing number of students and notifications while maintaining a responsive user experience.

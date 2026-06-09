@@ -615,3 +615,212 @@ Benefits:
 The notification retrieval query is expected to be the most frequently executed operation in the system. By introducing a composite index on `student_id` and `created_at`, along with pagination, caching, and read replicas, the system can continue to perform efficiently even when handling millions of notifications.
 
 
+# Stage 4
+
+## Scaling Strategy
+
+The current design works well for a moderate number of students and notifications. However, as the platform grows, additional measures will be required to maintain performance and reliability.
+
+Assume the system scales to:
+
+* 100,000+ students
+* Millions of notifications
+* Thousands of concurrent users
+
+The following challenges are expected.
+
+---
+
+## Challenge 1: Database Bottleneck
+
+As notification records continue to grow, the database will need to process larger volumes of reads and writes.
+
+### Impact
+
+* Slower query execution
+* Increased response times
+* Higher database load
+
+### Solution
+
+Introduce database indexing and read replicas.
+
+```text
+Application
+      |
+      |
+      +------> Primary Database (Writes)
+      |
+      +------> Read Replica 1
+      |
+      +------> Read Replica 2
+```
+
+The primary database handles writes, while read replicas handle notification retrieval requests.
+
+---
+
+## Challenge 2: High Read Traffic
+
+Students frequently open the notification panel, resulting in repeated database queries.
+
+### Impact
+
+* Increased load on the database
+* Reduced performance during peak usage
+
+### Solution
+
+Use Redis as a caching layer.
+
+```text
+Client
+   |
+   v
+Application
+   |
+   +-----> Redis Cache
+   |
+   +-----> Database
+```
+
+Frequently accessed notifications can be served directly from cache.
+
+Benefits:
+
+* Lower database load
+* Faster response times
+* Better user experience
+
+---
+
+## Challenge 3: Large Notification Volumes
+
+Over time, notification tables may contain millions of records.
+
+### Impact
+
+* Increased storage requirements
+* Slower maintenance operations
+* Longer backup times
+
+### Solution
+
+Archive older notifications.
+
+Example:
+
+```text
+Notifications older than 1 year
+                |
+                v
+Archive Database / Cold Storage
+```
+
+This keeps the active notification table small and efficient.
+
+---
+
+## Challenge 4: Real-Time Delivery at Scale
+
+A large number of simultaneous WebSocket connections can overwhelm a single server.
+
+### Impact
+
+* Connection limits
+* Increased memory usage
+* Reduced reliability
+
+### Solution
+
+Use multiple WebSocket servers behind a load balancer.
+
+```text
+                 Load Balancer
+                        |
+      ----------------------------------
+      |                |               |
+      v                v               v
+ WebSocket 1     WebSocket 2     WebSocket 3
+```
+
+This distributes client connections across multiple servers.
+
+---
+
+## Challenge 5: Notification Processing Delays
+
+Generating notifications synchronously can slow down the application.
+
+### Impact
+
+* Slower API responses
+* Reduced throughput
+
+### Solution
+
+Use a message queue.
+
+```text
+Notification Creator
+         |
+         v
+    Message Queue
+         |
+         v
+ Notification Worker
+         |
+         v
+     Database
+```
+
+Examples:
+
+* RabbitMQ
+* Apache Kafka
+* AWS SQS
+
+The queue allows notifications to be processed asynchronously.
+
+---
+
+## Proposed Scalable Architecture
+
+```text
+                +-------------+
+                |  Frontend   |
+                +-------------+
+                       |
+                       v
+                +-------------+
+                | API Server  |
+                +-------------+
+                       |
+        --------------------------------
+        |              |              |
+        v              v              v
+     Redis         Database      Message Queue
+      Cache         Cluster
+                                      |
+                                      v
+                               Notification Worker
+                                      |
+                                      v
+                               WebSocket Service
+```
+
+---
+
+## Conclusion
+
+The system can scale effectively by introducing:
+
+1. Database indexing
+2. Read replicas
+3. Redis caching
+4. Message queues
+5. Notification archiving
+6. Distributed WebSocket servers
+
+These improvements ensure that the platform remains responsive and reliable even when serving a large number of students and notifications.
+
